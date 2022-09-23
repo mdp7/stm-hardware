@@ -902,6 +902,11 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 //User functions
 void userFunctions(){}
+void resetSTM(){
+	HAL_NVIC_SystemReset(); //try this
+	wdg_activate(10);
+	wdg_reactivate()
+}
 void realignWheels(){
 	htim1.Instance->CCR4 = 170; //right
 	osDelay(400);
@@ -942,12 +947,13 @@ void motorActivate(){
 }
 
 void straight(double local_pwmVal_L, double local_pwmVal_R, uint8_t local_dir, double distance){
-	pwmVal_L = local_pwmVal_L; // pwm values
-	pwmVal_R = local_pwmVal_R;
+	pwmVal_L = local_pwmVal_L/2; // pwm values
+	pwmVal_R = local_pwmVal_R/2;
 	dir = local_dir;
 	servoVal = 150; //set servo dir
-	duration = distance * 30 *0.415;
+	duration = distance * 70 *0.415;
 	motorActivate();
+	HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
 }
 
 void gyrostraight(double local_pwmVal_L, double local_pwmVal_R, uint8_t local_dir, double distance){
@@ -1019,6 +1025,7 @@ void gyrostraight(double local_pwmVal_L, double local_pwmVal_R, uint8_t local_di
 
 void turn(uint8_t local_dir, int leftright, int angle){
 	dir = local_dir;
+	distprof=2;
 	if(distprof==1){ //red tiles/////////////////////////////////////////////////////////////
 		if(dir==1){ //forward
 			if(leftright == 0){//left
@@ -1026,7 +1033,7 @@ void turn(uint8_t local_dir, int leftright, int angle){
 				if(angle==45) duration = 399;
 				//        if(angle==15) duration = 105;
 				if(angle == 90)  {//making the forward turning cover 40cm by 25cm
-					straight(DEFAULTPWM,DEFAULTPWM,1,0.7); //move forward by 0.7cm
+					//straight(DEFAULTPWM,DEFAULTPWM,1,0.7); //move forward by 0.7cm
 					//duration = 815; //for actual red tiles
 //					duration = 805;
 					duration = 790;
@@ -1040,7 +1047,7 @@ void turn(uint8_t local_dir, int leftright, int angle){
 					realignWheels();
 				if(angle == 90)  {
 //					straight(DEFAULTPWM,DEFAULTPWM,1,0.6); //move forward by 0.6cm
-					straight(DEFAULTPWM,DEFAULTPWM,1,2.1); //move forward by 2.1cm
+					//straight(DEFAULTPWM,DEFAULTPWM,1,2.1); //move forward by 2.1cm
 				}
 			}else{//right
 				//duration = 7.604762*angle + 40;
@@ -1048,7 +1055,7 @@ void turn(uint8_t local_dir, int leftright, int angle){
 				if(angle==45) duration = 355;
 				//        if(angle==15) duration = 101;
 				if(angle == 90)  {//making the forward turning cover 40cm by 25cm
-					straight(DEFAULTPWM,DEFAULTPWM,1,3.1);//move forward by 3.1cm
+					//straight(DEFAULTPWM,DEFAULTPWM,1,3.1);//move forward by 3.1cm
 					//duration =720;//lab
 //					duration =715;//red tiles
 					duration = 700;
@@ -1061,7 +1068,7 @@ void turn(uint8_t local_dir, int leftright, int angle){
 					realignWheels();
 				if(angle == 90)  {
 //					straight(DEFAULTPWM,DEFAULTPWM,1,4.5); //move forward by 4.5cm
-					straight(DEFAULTPWM,DEFAULTPWM,1,2); //move forward by 2cm
+					//straight(DEFAULTPWM,DEFAULTPWM,1,2); //move forward by 2cm
 				}
 			}
 		} else {//backward
@@ -1108,18 +1115,18 @@ void turn(uint8_t local_dir, int leftright, int angle){
 				if(angle==45) duration = 420;
 				//        if(angle==15) duration = 105;
 				if(angle == 90)  {//making the forward turning cover 40cm by 25cm
-					straight(DEFAULTPWM,DEFAULTPWM,1,0.7); //move forward by 0.7cm
-					duration = 840;
+					//straight(DEFAULTPWM,DEFAULTPWM,1,0.7); //move forward by 0.7cm
+					duration = 850;
 				}
 					pwmVal_L = 2400; // pwm values
 					pwmVal_R = 4800;
-					servoVal = 112; //set servo dir
+					servoVal = 103; //set servo dir
 //					osDelay(1000);
 					motorActivate();
 					realignWheels();
 				if(angle == 90)  {
 //					straight(DEFAULTPWM,DEFAULTPWM,1,0.6); //move forward by 0.6cm
-					straight(DEFAULTPWM,DEFAULTPWM,1,2.1); //move forward by 2.1cm
+					//straight(DEFAULTPWM,DEFAULTPWM,1,2.1); //move forward by 2.1cm
 				}
 			}else{//right
 				//duration = 7.604762*angle + 40;
@@ -1127,7 +1134,7 @@ void turn(uint8_t local_dir, int leftright, int angle){
 				if(angle==45) duration = 385;
 				//        if(angle==15) duration = 101;
 				if(angle == 90)  {//making the forward turning cover 40cm by 25cm
-					straight(DEFAULTPWM,DEFAULTPWM,1,3.1);//move forward by 3.1cm
+					//straight(DEFAULTPWM,DEFAULTPWM,1,3.1);//move forward by 3.1cm
 					duration =770;//red tiles
 				}
 					pwmVal_L = 4800; // pwm values
@@ -1138,7 +1145,7 @@ void turn(uint8_t local_dir, int leftright, int angle){
 					realignWheels();
 				if(angle == 90)  {
 //					straight(DEFAULTPWM,DEFAULTPWM,1,4.5); //move forward by 4.5cm
-					straight(DEFAULTPWM,DEFAULTPWM,1,2); //move forward by 2cm
+					//straight(DEFAULTPWM,DEFAULTPWM,1,2); //move forward by 2cm
 				}
 			}
 		} else {//backwards
@@ -1146,18 +1153,18 @@ void turn(uint8_t local_dir, int leftright, int angle){
 				if(angle==15) duration = 137;
 				if(angle==45) duration = 410;
 				if(angle == 90)  {//making the forward turning cover 25cm by 40cm
-					straight(DEFAULTPWM,DEFAULTPWM,0,1.5);//move back by 1.5 cm
+					//straight(DEFAULTPWM,DEFAULTPWM,0,1.5);//move back by 1.5 cm
 					duration =820; //duration =750;
 				}
 					pwmVal_L = 2400; // pwm values
 					pwmVal_R = 4800;
-					servoVal = 112; //set servo dir
+					servoVal = 100; //set servo dir
 //					osDelay(1000);
 					motorActivate();
 					realignWheels();
 				if(angle == 90)  {
 //					straight(DEFAULTPWM,DEFAULTPWM,0,4.2); //move backwards by 4.2cm
-					straight(DEFAULTPWM,DEFAULTPWM,0,4.7); //move backwards by 4.2cm
+					//straight(DEFAULTPWM,DEFAULTPWM,0,4.7); //move backwards by 4.2cm
 				}
 			}else{//right
 				if(angle==15) duration = 139;
@@ -1173,11 +1180,12 @@ void turn(uint8_t local_dir, int leftright, int angle){
 					motorActivate();
 					realignWheels();
 				if(angle == 90)  {
-					straight(DEFAULTPWM,DEFAULTPWM,0,3.1); //move back by 4.6cm
+					//straight(DEFAULTPWM,DEFAULTPWM,0,3.1); //move back by 4.6cm
 				}
 			}
 		}
 	}//end lab
+	HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
 
 
 }
@@ -1866,7 +1874,12 @@ void uart(void *argument)
 		  char * pch = malloc(20);
 		  pch = strtok (aRxBuffer," ");
 
+		  if(strcmp(pch, "RESET")==0){
+			  HAL_NVIC_SystemReset();
+			  osDelay(100); //adjust this maybe
+			  HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
 
+		  }
 		  if(strcmp(pch, "FORWARD")==0){
 			  dir=1;
 		  }else{
@@ -1879,18 +1892,37 @@ void uart(void *argument)
 			  pch = strtok (NULL, " "); //Next word first
 			  if(strcmp(pch,"LEFT")==0){//IF TURN LEFT
 				  //if (dir=1) //straight(DEFAULTPWM,DEFAULTPWM,1,50);
-				  gyroturn(dir, 0, 90);
+				  turn(dir,0,90);
+				  //gyroturn(dir, 0, 90);
 				  //straight(DEFAULTPWM, DEFAULTPWM, 1, 10);
 				  //HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
 			  }
+			  if(strcmp(pch,"LEFFT")==0){//IF TURN LEFT 180
+				  gyroturn(dir,0,180);
+			  }
+			  if(strcmp(pch,"LEFFFT")==0){//IF TURN LEFT 270
+				  gyroturn(dir,0,270);
+			  }
 			  if(strcmp(pch,"RIGHT")==0){//IF TURN RIGHT
-				  gyroturn(dir,1,90);
+				  turn(dir,1,90);
+				  //gyroturn(dir,1,90);
 				  //HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
 			  }
+			  if(strcmp(pch,"RIGHHT")==0){//IF TURN RIGHT 180
+			  				  gyroturn(dir,1,180);
+			  			  }
+			  if(strcmp(pch,"RIGHHHT")==0){//IF TURN RIGHT 270
+			  				  gyroturn(dir,1,270);
+			  			  }
 		  }
 		  else if(strcmp(pch,"MOVE")==0){
 			  pch = strtok (NULL, " "); //Next word first
-			  gyrostraight(4500,DEFAULTPWM,dir,atoi(pch));
+			  if (dir==0){
+				  straight(4500,4500,dir,atoi(pch));
+			  }else{
+				  gyrostraight(4500,DEFAULTPWM,dir,atoi(pch));
+			  }
+
 		  }
 
 		  for(int i =0; i<20;i++){
