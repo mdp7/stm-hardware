@@ -269,7 +269,7 @@ int16_t magn[3];
 short Deviation_gyro[3],Original_gyro[3];
 short s16Gyro[3], s16Accel[3], s16Magn[3];
 int16_t gyro[3], accel[3],magnet[3];
-uint16_t Deviation_Count = 0;
+//uint16_t Deviation_Count = 0;
 uint64_t gyrosum=0, gyrozero=0;
 int64_t gyrosumsigned=0;
 
@@ -951,26 +951,30 @@ void StraightMovement(
 		uint32_t pwmL,
 		uint32_t pwmR,
 		uint32_t pulseTarget,
-		double ppmsTarget  // target pulse per millisecond
+		double ppmsTarget,  // target pulse per millisecond
+		uint8_t willTransmit
 		)
 {
-	uint8_t oledBuffer1[20], oledBuffer2[20], oledBuffer3[20], oledBuffer4[20], oledBuffer5[20];
+	char oledBuffer1[20], oledBuffer2[20], oledBuffer3[20], oledBuffer4[20];
 	uint32_t pulseTotal = 0, pulseTotalL = 0, pulseTotalR = 0;
 	uint32_t timeStampPrev, timeStampCurr, timeStampDiff;
 	uint32_t pulsePrevL, pulseCurrL, pulseDiffL;
 	uint32_t pulsePrevR, pulseCurrR, pulseDiffR;
 	double ppmsL, ppmsR;
 
-	ICMInit();
-	resetgyrosumsigned();
-
 	InitMotor(dir);  // initialize motors
 	htim1.Instance->CCR4 = servo;  // set default servo value
+	osDelay(200);
+
+	pulsePrevL = __HAL_TIM_GET_COUNTER(&htim2);  // get initial pulse
+	pulsePrevR = __HAL_TIM_GET_COUNTER(&htim3); // get initial pulse
+
 	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, pwmL);  // start motor L
 	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, pwmL);  // start motor R
 	timeStampPrev = HAL_GetTick();  // get initial time stamp
-	pulsePrevL = __HAL_TIM_GET_COUNTER(&htim2);  // get initial pulse
-	pulsePrevR = __HAL_TIM_GET_COUNTER(&htim3); // get initial pulse
+
+//	StartSum();
+	gyrosumsigned = 0;
 
 	// Movement loop
 	while (pulseTotal < pulseTarget)
@@ -1004,8 +1008,14 @@ void StraightMovement(
 		ppmsR = pulseDiffR * 1.0 / timeStampDiff;
 
 		// Adjust PWM
-		pwmL = AdjustPWM(pwmL, ppmsL, ppmsTarget);
-		pwmR = AdjustPWM(pwmR, ppmsR, ppmsTarget);
+		if ((ppmsL < ppmsTarget && ppmsL < ppmsR) || (ppmsL > ppmsTarget && ppmsL > ppmsR))
+		{
+			pwmL = AdjustPWM(pwmL, ppmsL, ppmsTarget);
+		}
+		if ((ppmsR < ppmsTarget && ppmsR < ppmsL) || (ppmsR > ppmsTarget && ppmsR > ppmsL))
+		{
+			pwmR = AdjustPWM(pwmR, ppmsR, ppmsTarget);
+		}
 
 		pulseTotalL += pulseDiffL;
 		pulseTotalR += pulseDiffR;
@@ -1014,54 +1024,72 @@ void StraightMovement(
 		__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, pwmL);  // update
 		__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, pwmR);  // update
 
-		UpdateDeviation();
-		MPU_Get_Gyroscope();
-		ProcessGyro();
+		int8_t sign = dir == FORWARD_DIR ? 1 : -1;
 
-		if (Gyrosumsigned() > 120)
+		if (gyrosumsigned * sign > 180)
 		{
-			resetgyrosumsigned();
+			gyrosumsigned = 0;
+			servo = servo + 1 <= SERVO_MAX ? servo + 1 : servo;
 			servo++;
 			htim1.Instance->CCR4 = servo;
+//			StartSum();
 		}
-		else if (Gyrosumsigned() < -120)
+		else if (gyrosumsigned * sign < -180)
 		{
-			resetgyrosumsigned();
+			gyrosumsigned = 0;
+			servo = servo - 1 > SERVO_MIN ? servo - 1 : servo;
 			servo--;
 			htim1.Instance->CCR4 = servo;
+//			StartSum();
 		}
 
 		// Display
-//		sprintf(oledBuffer1, "PWM%5d/%5d", pwmL, pwmR);
+//		sprintf(oledBuffer1, "PWM%5lu/%5lu", pwmL, pwmR);
 //		sprintf(oledBuffer2, "PPM%5.2f/%5.2f", ppmsL, ppmsR);
-//		sprintf(oledBuffer3, "PUL%5d/%5d", pulseTotalL, pulseTotalR);
-//		sprintf(oledBuffer4, "SER%5d", servo);
-//		sprintf(oledBuffer5, "GYR%5d", Gyrosumsigned());
-		OLED_ShowString(0,  0, oledBuffer1);
-		OLED_ShowString(0, 12, oledBuffer2);
-		OLED_ShowString(0, 24, oledBuffer3);
-		OLED_ShowString(0, 36, oledBuffer4);
-		OLED_ShowString(0, 48, oledBuffer5);
+//		sprintf(oledBuffer3, "PUL%5ld/%5ld", pulseTotalL, pulseTotalR);
+//		sprintf(oledBuffer4, "SER%5ld/%5ld", servo, pulseTarget);
+//		OLED_ShowString(0,  0, (uint8_t*) oledBuffer1);
+//		OLED_ShowString(0, 12, (uint8_t*) oledBuffer2);
+//		OLED_ShowString(0, 24, (uint8_t*) oledBuffer3);
+//		OLED_ShowString(0, 36, (uint8_t*) oledBuffer4);
 	}
 	// Stop motors
 	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
 	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
-	realignWheels();
-	HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
 
+	realignWheels();
+
+	if(willTransmit == 1){
+		HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
+	}
+
+
+
+//	ResetSum();
 }
 
 uint32_t DistanceToPulse(int distance)
 {
-	uint32_t pulse = ((PULSE_PER_REVOLUTION * distance) *0.95)/ (2 * PI * WHEEL_R);
+	uint32_t pulse = ((PULSE_PER_REVOLUTION * distance))/ WHEEL_C - FORWARD_SLIDE_PULSE;
 	return pulse;
 }
 
-void Straight(uint8_t dir, int distance)
+uint32_t SmallDistanceToPulse(int distance)
+{
+	uint32_t pulse = ((PULSE_PER_REVOLUTION * distance) *0.95)/ SMALL_WHEEL_C - SMALL_FORWARD_SLIDE_PULSE;
+	return pulse;
+}
+
+void Straight(uint8_t dir, int distance, uint8_t willTransmit, uint32_t servo)
 {
 	uint32_t pulseTarget = DistanceToPulse(distance);
-	StraightMovement(dir, DEFAULT_FORWARD_SERVO, DEFAULT_FORWARD_PWM_L, DEFAULT_FORWARD_PWM_R, pulseTarget, FORWARD_PULSE_PER_MS);
+	StraightMovement(dir, servo, DEFAULT_FORWARD_PWM_L, DEFAULT_FORWARD_PWM_R, pulseTarget, FORWARD_PULSE_PER_MS, willTransmit);
+}
 
+void SmallStraight(uint8_t dir, int distance, uint8_t willTransmit, uint32_t servo)
+{
+	uint32_t pulseTarget = SmallDistanceToPulse(distance);
+	StraightMovement(dir, servo, DEFAULT_FORWARD_PWM_L, DEFAULT_FORWARD_PWM_R, pulseTarget, FORWARD_PULSE_PER_MS , willTransmit);
 }
 
 void userFunctions(){}
@@ -1071,10 +1099,10 @@ void resetSTM(){
 	wdg_reactivate();
 }
 void realignWheels(){
-	htim1.Instance->CCR4 = 170; //right
-	osDelay(400);
-	htim1.Instance->CCR4 = 147; //left
-	osDelay(300);
+//	htim1.Instance->CCR4 = 220; //right
+//	osDelay(400);
+	htim1.Instance->CCR4 = DEFAULT_FORWARD_SERVO; //left
+	osDelay(600);
 //	htim1.Instance->CCR4 = ; //center
 }
 
@@ -1136,7 +1164,7 @@ void gyrostraight(double local_pwmVal_L, double local_pwmVal_R, uint8_t local_di
 	reqduration = distance * 33 *0.415;
 	curduration = 0;
 	gyrosumsigned = 0;
-	servodefault = 147;
+	servodefault = 150;
 	while(curduration<=(reqduration)*0.8){
 		servoVal = servodefault;
 		if(dir==1){
@@ -1181,7 +1209,7 @@ void gyrostraight(double local_pwmVal_L, double local_pwmVal_R, uint8_t local_di
 		curduration+=30;
 	}
 	while(curduration<=reqduration){
-		servoVal = 147;
+		servoVal = 150;
 		pwmVal_L = 1800;
 				pwmVal_R = 2000;
 				duration = 30;
@@ -1447,9 +1475,16 @@ void ipt90(int leftright){
 
 		//Straight(1,3.3);
 		//straight(DEFAULTPWM, DEFAULTPWM, 0, 2.3+1);
-		straight2(4500,4500,0,9);
-		gyroturn(1,0,45);
-		gyroturn(0,1,48);
+		SmallStraight(1, 8, 0, 150);
+		osDelay(100);
+//		straight2(4500,4500,0,9);
+		gyroturn(1,0,42);
+		osDelay(100);
+		gyroturn(0,1,44);
+		realignWheels();
+		osDelay(100);
+		SmallStraight(0, 4, 0, 140);
+		osDelay(100);
 		//Straight(0,3);
 		//straight2(4500,4500,1,3); //forward 3
 		//straight(DEFAULTPWM, DEFAULTPWM, 1, 4.7+1);
@@ -1464,10 +1499,16 @@ void ipt90(int leftright){
 		//straight(DEFAULTPWM, DEFAULTPWM, 0, 4.6+1);
 
 		//Straight(1,8);
-		straight2(4500,4500,0,2);
+//		straight2(4500,4500,0,2);
+		SmallStraight(1, 4, 0, 150);
+		osDelay(100);
 		gyroturn(1,1,45);
-		gyroturn(0,0,48); //OR 41
-		straight2(4500,4500,1,7.5);
+		osDelay(100);
+		gyroturn(0,0,41); //OR 41
+		osDelay(100);
+		SmallStraight(0, 6, 0, 160);
+		osDelay(100);
+//		straight2(4500,4500,1,7.5);
 		//Straight(0,7,5);
 		//straight(DEFAULTPWM, DEFAULTPWM, 1, 0.7+1);
 	}
@@ -1898,18 +1939,20 @@ void motor(void *argument)
 	HAL_TIM_PWM_Start(&htim8,TIM_CHANNEL_2);
 	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
 
+	realignWheels();
+
 	/* Infinite loop */
 	int count=0;
 	int reset=1;
 	for(;;)
 	{
-		if(reset==1){
-			realignWheels();
-			reset=0;
-		}
-
-
-
+//		if(reset==1){
+//			realignWheels();
+//			reset=0;
+//		}
+//
+//
+		osDelay(100);
 
 	}
 	osDelay(200);
@@ -2105,10 +2148,10 @@ void uart(void *argument)
 		  else if(strcmp(pch,"MOVE")==0){
 			  pch = strtok (NULL, " "); //Next word first
 			  if (dir==0){
-				  straight(4500,4500,dir,atoi(pch));
-				  //Straight(BACKWARD_DIR, atoi(pch));
+//				  straight(4500,4500,dir,atoi(pch));
+				  Straight(BACKWARD_DIR, atoi(pch), 1, 150);
 			  }else{
-				  Straight(FORWARD_DIR, atoi(pch));
+				  Straight(FORWARD_DIR, atoi(pch), 1, 150);
 				  //gyrostraight(4500,DEFAULTPWM,dir,atoi(pch));
 				  //gyrostraight(2250,2500,dir,atoi(pch));
 				  //gyrostraight(5000,DEFAULTPWM,dir,atoi(pch));
@@ -2145,7 +2188,7 @@ void icm20948(void *argument)
 	  //vTaskDelayUntil(&lastWakeTime, 0.01);
 //	  if(Deviation_Count<CONTROL_DELAY)
 	  {
-		  Deviation_Count++;
+//		  Deviation_Count++;
 		  memcpy(Deviation_gyro,gyro,sizeof(gyro));
 	  }
 	  //Get acceleration sensor data
