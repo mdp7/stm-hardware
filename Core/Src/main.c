@@ -147,6 +147,7 @@ double reqduration=0, curduration=0;
 uint8_t distprof = 0;
 uint8_t servodefault = 150;
 uint8_t correctionleft = 147, correctionright = 152;
+uint8_t lastservo = 150;
 
 //Ultrasonic
 uint32_t IC_Val1 = 0;
@@ -288,7 +289,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+	HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -1026,7 +1027,7 @@ void StraightMovement(
 
 		int8_t sign = dir == FORWARD_DIR ? 1 : -1;
 
-		if (gyrosumsigned * sign > 180)
+		if (gyrosumsigned * sign > 150)
 		{
 			gyrosumsigned = 0;
 			servo = servo + 1 <= SERVO_MAX ? servo + 1 : servo;
@@ -1034,7 +1035,7 @@ void StraightMovement(
 			htim1.Instance->CCR4 = servo;
 //			StartSum();
 		}
-		else if (gyrosumsigned * sign < -180)
+		else if (gyrosumsigned * sign < -150)
 		{
 			gyrosumsigned = 0;
 			servo = servo - 1 > SERVO_MIN ? servo - 1 : servo;
@@ -1058,6 +1059,7 @@ void StraightMovement(
 	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
 
 	realignWheels();
+	lastservo = servo;
 
 	if(willTransmit == 1){
 		HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
@@ -1068,7 +1070,7 @@ void StraightMovement(
 //	ResetSum();
 }
 
-uint32_t DistanceToPulse(int distance)
+uint32_t DistanceToPulse(double distance)
 {
 	uint32_t pulse = ((PULSE_PER_REVOLUTION * distance))/ WHEEL_C - FORWARD_SLIDE_PULSE;
 	return pulse;
@@ -1080,7 +1082,7 @@ uint32_t SmallDistanceToPulse(int distance)
 	return pulse;
 }
 
-void Straight(uint8_t dir, int distance, uint8_t willTransmit, uint32_t servo)
+void Straight(uint8_t dir, double distance, uint8_t willTransmit, uint32_t servo)
 {
 	uint32_t pulseTarget = DistanceToPulse(distance);
 	StraightMovement(dir, servo, DEFAULT_FORWARD_PWM_L, DEFAULT_FORWARD_PWM_R, pulseTarget, FORWARD_PULSE_PER_MS, willTransmit);
@@ -1396,7 +1398,7 @@ void gyroturn(uint8_t local_dir, int leftright, int angle){ //23,580 for 90 degr
 	dir = local_dir;
 	if(leftright==0) htim1.Instance->CCR4 = 105;
 	else htim1.Instance->CCR4 = 210;
-	osDelay(300);
+	osDelay(700);
 	while (gyrosum<=(angle*245*4*0.7)){
 			if(leftright==0){//left
 				duration = 10;
@@ -1464,58 +1466,125 @@ void tpturn(int leftright){
 
 }
 
+//void ipt90(int leftright){
+//	if (leftright ==0){//left
+//		/////////HWL VALUES///////
+//		Straight(1, 7, 0, 150); //BACK
+//		osDelay(100);
+//		gyroturn(1,0,44); //BACK RIGHT
+//		osDelay(100);
+//		gyroturn(0,1,45); //FRONT LEFT
+//		realignWheels();
+//		osDelay(100);
+//		Straight(0, 0.7, 0, 140); //FORWARD
+//		osDelay(100);
+//		//BACKFIRSTTHENFORWARD//
+////		SmallStraight(0, 4, 0, 140);
+////		osDelay(100);
+////		gyroturn(0,1,44);
+////		osDelay(100);
+////		gyroturn(1,0,42);
+////		realignWheels();
+////		osDelay(100);
+////		SmallStraight(1, 9, 0, 150);
+////		osDelay(100);
+//
+//
+//	}else{
+//		/////////HWL VALUES//////////
+//		SmallStraight(1, 4, 0, 150); //BACK
+//		osDelay(100);
+//		gyroturn(1,1,45); //FRONT RIGHT
+//		osDelay(100);
+//		gyroturn(0,0,41); //OR 41 //BACK LEFT
+//		osDelay(100);
+//		SmallStraight(0, 7.5, 0, 160); //FORWARD
+//		osDelay(100);
+//
+////		//BACKTHENFORWARD//
+////		SmallStraight(0, 8.5, 0, 160);
+//
+////		osDelay(100);
+////		gyroturn(1,1,45);
+////		osDelay(100);
+////		gyroturn(0,0,41); //OR 41
+////		osDelay(100);
+////		SmallStraight(1, 4, 0, 150);
+////		osDelay(100);
+//	}
+//	realignWheels();
+//	HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
+//}
+
 void ipt90(int leftright){
-	if (leftright ==0){//left
-//		turn(1,0,15);
-//		turn(0,1,15);
-//		turn(1,0,15);
-//		turn(0,1,15);
-//		turn(1,0,15);
-//		turn(0,1,15);
+ if (leftright ==0){//left
+  if (lastservo > 150){ // WAS RIGHT
+   SmallStraight(1, 6.5, 0, 150); //BACK
+   osDelay(100);
+   gyroturn(1,0,45); //FRONT LEFT //CHANGE IS HERE
+   osDelay(100);
+   gyroturn(0,1,45); //BACK RIGHT
+   realignWheels();
+   osDelay(100);
+   SmallStraight(0, 4, 0, 140); //FORWARD
+   osDelay(100);
+  }else if (lastservo < 150){ // WAS LEFT
+	   SmallStraight(1, 6.5, 0, 150); //BACK
+	   osDelay(100);
+	   gyroturn(1,0,43); //FRONT LEFT
+	   osDelay(100);
+	   gyroturn(0,1,45); //BACK RIGHT
+	   realignWheels();
+	   osDelay(100);
+	   SmallStraight(0, 4, 0, 140); //FORWARD
+	   osDelay(100);
+  }else{
+   SmallStraight(1, 6.5, 0, 150); //BACK
+   osDelay(100);
+   gyroturn(1,0,44); //FRONT LEFT
+   osDelay(100);
+   gyroturn(0,1,45); //BACK RIGHT
+   realignWheels();
+   osDelay(100);
+   SmallStraight(0, 4, 0, 140); //FORWARD
+   osDelay(100);
+  }
 
-		//Straight(1,3.3);
-		//straight(DEFAULTPWM, DEFAULTPWM, 0, 2.3+1);
-		SmallStraight(1, 8, 0, 150);
-		osDelay(100);
-//		straight2(4500,4500,0,9);
-		gyroturn(1,0,42);
-		osDelay(100);
-		gyroturn(0,1,44);
-		realignWheels();
-		osDelay(100);
-		SmallStraight(0, 4, 0, 140);
-		osDelay(100);
-		//Straight(0,3);
-		//straight2(4500,4500,1,3); //forward 3
-		//straight(DEFAULTPWM, DEFAULTPWM, 1, 4.7+1);
-		//Straight(0,5.7);
-	}else{
-//		turn(1,1,15);
-//		turn(0,0,15);
-//		turn(1,1,15);
-//		turn(0,0,15);
-//		turn(1,1,15);
-//		turn(0,0,15);
-		//straight(DEFAULTPWM, DEFAULTPWM, 0, 4.6+1);
 
-		//Straight(1,8);
-//		straight2(4500,4500,0,2);
-		SmallStraight(1, 4, 0, 150);
-		osDelay(100);
-		gyroturn(1,1,45);
-		osDelay(100);
-		gyroturn(0,0,41); //OR 41
-		osDelay(100);
-		SmallStraight(0, 6, 0, 160);
-		osDelay(100);
-//		straight2(4500,4500,1,7.5);
-		//Straight(0,7,5);
-		//straight(DEFAULTPWM, DEFAULTPWM, 1, 0.7+1);
-	}
-	realignWheels();
-	HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
+ }else{
+  if (lastservo > 150){ //WAS RIGHT
+	  SmallStraight(1, 7.5, 0, 150); //BACK
+	  	  osDelay(100);
+	  	  gyroturn(1,1,44); //FRONT RIGHT
+	  	  osDelay(100);
+	  	  gyroturn(0,0,41); //OR 41 //BACK LEFT
+	  	  osDelay(100);
+	  	  SmallStraight(0, 7.5, 0, 160); //FORWARD
+	  	  osDelay(100);
+  }else if (lastservo < 150){ //WAS LEFT
+	  SmallStraight(1, 7.5, 0, 150); //BACK
+	  	  osDelay(100);
+	  	  gyroturn(1,1,46); //FRONT RIGHT
+	  	  osDelay(100);
+	  	  gyroturn(0,0,41); //OR 41 //BACK LEFT
+	  	  osDelay(100);
+	  	  SmallStraight(0, 7.5, 0, 160); //FORWARD
+	  	  osDelay(100);
+  }else{
+	  SmallStraight(1, 7.5, 0, 150); //BACK
+	  osDelay(100);
+	  gyroturn(1,1,45); //FRONT RIGHT
+	  osDelay(100);
+	  gyroturn(0,0,43); //OR 41 //BACK LEFT
+	  osDelay(100);
+	  SmallStraight(0, 7.5, 0, 160); //FORWARD
+	  osDelay(100);
+  }
+
+ }
+ realignWheels();
+ HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
 }
-
 void ICMWriteOneByte(uint8_t RegAddr, uint8_t Data)
 {
 	HAL_I2C_Mem_Write(&hi2c1, I2C_ADD_ICM20948, RegAddr, I2C_MEMADD_SIZE_8BIT, &Data, 1, 0xffff);
