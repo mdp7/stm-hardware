@@ -148,13 +148,15 @@ uint8_t distprof = 0;
 uint8_t servodefault = 150;
 uint8_t correctionleft = 147, correctionright = 152;
 uint8_t lastservo = 150;
+uint8_t entered = 0;
 
 //Ultrasonic
 uint32_t IC_Val1 = 0;
 uint32_t IC_Val2 = 0;
 uint32_t Difference = 0;
 uint8_t Is_First_Captured = 0;  // is the first value captured ?
-uint8_t Distance  = 0;
+uint8_t Distance  = 1;
+uint8_t sensordist = 0;
 
 //For Profile Switching
 uint8_t userBtnCount = 0;
@@ -289,7 +291,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-	HAL_Init();
+  HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -650,7 +652,7 @@ static void MX_TIM4_Init(void)
 
   /* USER CODE END TIM4_Init 1 */
   htim4.Instance = TIM4;
-  htim4.Init.Prescaler = 16-1;
+  htim4.Init.Prescaler = 7;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim4.Init.Period = 0xffff-1;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -1027,19 +1029,17 @@ void StraightMovement(
 
 		int8_t sign = dir == FORWARD_DIR ? 1 : -1;
 
-		if (gyrosumsigned * sign > 150)
+		if (gyrosumsigned * sign > 120)
 		{
 			gyrosumsigned = 0;
 			servo = servo + 1 <= SERVO_MAX ? servo + 1 : servo;
-			servo++;
 			htim1.Instance->CCR4 = servo;
 //			StartSum();
 		}
-		else if (gyrosumsigned * sign < -150)
+		else if (gyrosumsigned * sign < -120)
 		{
 			gyrosumsigned = 0;
 			servo = servo - 1 > SERVO_MIN ? servo - 1 : servo;
-			servo--;
 			htim1.Instance->CCR4 = servo;
 //			StartSum();
 		}
@@ -1068,6 +1068,12 @@ void StraightMovement(
 
 
 //	ResetSum();
+}
+
+void delay (uint16_t us)
+{
+	__HAL_TIM_SET_COUNTER(&htim1,0);  // set the counter value a 0
+	while (__HAL_TIM_GET_COUNTER(&htim1) < us);  // wait for the counter to reach the us input in the parameter
 }
 
 uint32_t DistanceToPulse(double distance)
@@ -1527,6 +1533,7 @@ void ipt90(int leftright){
    realignWheels();
    osDelay(100);
    SmallStraight(0, 4, 0, 140); //FORWARD
+   //SmallStraight(1, 6, 0, 150); //BACK
    osDelay(100);
   }else if (lastservo < 150){ // WAS LEFT
 	   SmallStraight(1, 6.5, 0, 150); //BACK
@@ -1537,16 +1544,18 @@ void ipt90(int leftright){
 	   realignWheels();
 	   osDelay(100);
 	   SmallStraight(0, 4, 0, 140); //FORWARD
+	   //SmallStraight(1, 6, 0, 150); //BACK
 	   osDelay(100);
   }else{
-   SmallStraight(1, 6.5, 0, 150); //BACK
+   SmallStraight(1, 6.5, 0, 150); //BACK     LAB 6.5  RED TILE 11
    osDelay(100);
    gyroturn(1,0,44); //FRONT LEFT
    osDelay(100);
-   gyroturn(0,1,45); //BACK RIGHT
+   gyroturn(0,1,44); //BACK RIGHT
    realignWheels();
-   osDelay(100);
-   SmallStraight(0, 4, 0, 140); //FORWARD
+   osDelay(200);
+   SmallStraight(0, 4, 0, 140); //FORWARD      LAB 4  RED TILE 0 // RMB CHANGE FOR ALL!!
+   //SmallStraight(1, 6, 0, 150); //BACK
    osDelay(100);
   }
 
@@ -1555,7 +1564,7 @@ void ipt90(int leftright){
   if (lastservo > 150){ //WAS RIGHT
 	  SmallStraight(1, 7.5, 0, 150); //BACK
 	  	  osDelay(100);
-	  	  gyroturn(1,1,44); //FRONT RIGHT
+	  	  gyroturn(1,1,43); //FRONT RIGHT
 	  	  osDelay(100);
 	  	  gyroturn(0,0,41); //OR 41 //BACK LEFT
 	  	  osDelay(100);
@@ -1564,20 +1573,20 @@ void ipt90(int leftright){
   }else if (lastservo < 150){ //WAS LEFT
 	  SmallStraight(1, 7.5, 0, 150); //BACK
 	  	  osDelay(100);
-	  	  gyroturn(1,1,46); //FRONT RIGHT
+	  	  gyroturn(1,1,45); //FRONT RIGHT
 	  	  osDelay(100);
 	  	  gyroturn(0,0,41); //OR 41 //BACK LEFT
 	  	  osDelay(100);
 	  	  SmallStraight(0, 7.5, 0, 160); //FORWARD
 	  	  osDelay(100);
   }else{
-	  SmallStraight(1, 7.5, 0, 150); //BACK
+	  SmallStraight(1, 7.5, 0, 150); //BACK         LAB 7.5   RED TILE 5.5 //RMB CHANGE FOR ALL!
 	  osDelay(100);
-	  gyroturn(1,1,45); //FRONT RIGHT
+	  gyroturn(1,1,44); //FRONT RIGHT
 	  osDelay(100);
-	  gyroturn(0,0,43); //OR 41 //BACK LEFT
+	  gyroturn(0,0,41); //OR 41 //BACK LEFT          LAB FLOOR 41 RED TILE 40
 	  osDelay(100);
-	  SmallStraight(0, 7.5, 0, 160); //FORWARD
+	  SmallStraight(0, 7.5, 0, 160); //FORWARD          LAB FLOOR 7.5  RED TILE
 	  osDelay(100);
   }
 
@@ -1881,6 +1890,7 @@ void ICMInit()
 
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
+	entered=1;
 	if (htim->Instance==htim4.Instance && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)  // if the interrupt source is channel1
 	{
 		if (Is_First_Captured==0) // if the first value is not captured
@@ -1914,6 +1924,15 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 //			__HAL_TIM_DISABLE_IT(&htim4, TIM_IT_CC1);
 		}
 	}
+}
+
+void HCSR04_Read (void)
+{
+	HAL_GPIO_WritePin(TRIG_GPIO_Port, TRIG_Pin, GPIO_PIN_SET);  // pull the TRIG pin HIGH
+	delay(10);  // wait for 10 us
+	HAL_GPIO_WritePin(TRIG_GPIO_Port, TRIG_Pin, GPIO_PIN_RESET);  // pull the TRIG pin low
+
+	__HAL_TIM_ENABLE_IT(&htim1, TIM_IT_CC1);
 }
 
 
@@ -2133,17 +2152,21 @@ void encoder(void *argument)
 /* USER CODE END Header_ultra */
 void ultra(void *argument)
 {
+	//uint8_t hello[20];
+
   /* USER CODE BEGIN ultra */
   /* Infinite loop */
 
 	__HAL_TIM_ENABLE_IT(&htim4, TIM_IT_CC1);
-  for(;;)
-  {
-  HAL_GPIO_WritePin(TRIG_GPIO_Port, TRIG_Pin, GPIO_PIN_SET);  // pull the TRIG pin HIGH
-	osDelay(1);  // wait for 10 us
-	HAL_GPIO_WritePin(TRIG_GPIO_Port, TRIG_Pin, GPIO_PIN_RESET);  // pull the TRIG pin low
+//	HAL_TIM_IC_START_IT(&htim4, TIM_CHANNEL_1);
 
-    osDelay(10);
+	for(;;)
+  {
+		HCSR04_Read();
+		sensordist=Distance;
+		//sprintf(hello,"Dist:%5d",sensordist);
+		//OLED_ShowString(70,50,hello);
+		osDelay(60);
   }
   /* USER CODE END ultra */
 }
