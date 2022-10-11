@@ -31,8 +31,10 @@
 //#define DEFAULT_FORWARD_PWM_R 2600  // TODO: test on lab floor
 //#define DEFAULT_FORWARD_PWM_L 2200  // TODO: test on lab floor
 //#define DEFAULT_FORWARD_PWM_R 2400  // TODO: test on lab floor
-#define DEFAULT_FORWARD_PWM_L 1500  // TODO: test on lab floor
-#define DEFAULT_FORWARD_PWM_R 1650  // TODO: test on lab floor
+//#define DEFAULT_FORWARD_PWM_L 1500  // TODO: test on lab floor
+//#define DEFAULT_FORWARD_PWM_R 1650  // TODO: test on lab floor
+#define DEFAULT_FORWARD_PWM_L 4000  // TODO: test on lab floor
+#define DEFAULT_FORWARD_PWM_R 4250  // TODO: test on lab floor
 #define FORWARD_SLIDE_PULSE 20
 
 
@@ -41,7 +43,7 @@
 // x pulse/ms = (x / 1560) revolution/ms = (6 * pi * x / 1560) cm/ms
 // 3 pulse/ms = 0.002 revolution/ms = 0.036 cm/ms
 // 6 pulse/ms = 0.004 revolution/ms = 0.072 cm/ms = 0.725 m/s
-#define FORWARD_PULSE_PER_MS 2
+#define FORWARD_PULSE_PER_MS 7  // 0.85 m/s
 #define PPMS_THRESHOLD 0.01
 #define PWM_INC_VAL 3
 #define PPMS_TO_PWM_RATIO 20
