@@ -1468,50 +1468,121 @@ void gyroturn(uint8_t local_dir, int leftright, int angle){ //23,580 for 90 degr
 	HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
 }
 
-void TFT(uint8_t local_dir, int leftright, int angle)
-{ //23,580 for 90 degrees
+void LFR(uint32_t dx)
+{
+	// LEFT TURN
 	gyrosum = 0;
-	dir = local_dir;
-	if(leftright==0) htim1.Instance->CCR4 = 105;
-	else htim1.Instance->CCR4 = 210;
-	osDelay(700);
-	while (gyrosum<=(angle*245*4*0.7)){
-			if(leftright==0){//left
-				duration = 10;
-				pwmVal_L = 1200; // pwm values 1200
-				pwmVal_R = 2400; // 2400
-				servoVal = 100; //set servo dir
-				motorActivate();
-//				sprintf(icmTempMsg,"%+09d,",gyrosum);
-//				HAL_UART_Transmit(&huart3, (uint8_t *)&icmTempMsg, 10, 0xFFFF);
-			}else{//right
-				duration = 10;
-				pwmVal_L = 2400; // pwm values
-				pwmVal_R = 0;
-				servoVal = 290; //set servo dir
-				motorActivate();
-//				sprintf(icmTempMsg,"%+09d,",gyrosum);
-//				HAL_UART_Transmit(&huart3, (uint8_t *)&icmTempMsg, 10, 0xFFFF);
-			}
+	htim1.Instance->CCR4 = 105;
+	osDelay(300);
+	while (gyrosum<=(30*245*4)){
+		duration = 10;
+		pwmVal_L = 1500; // pwm values 1200
+		pwmVal_R = 3000; // 2400
+		servoVal = 100; //set servo dir
+		motorActivate();
 	}
-	while (gyrosum<=(angle*245*4)){ //last 30%
-			if(leftright==0){//left
-				duration = 10;
-				pwmVal_L = 600; // pwm values
-				pwmVal_R = 1200;
-				servoVal = 100; //set servo dir
-				motorActivate();
-//				sprintf(icmTempMsg,"%+09d,",gyrosum);
-//				HAL_UART_Transmit(&huart3, (uint8_t *)&icmTempMsg, 10, 0xFFFF);
-			}else{//right
-				duration = 10;
-				pwmVal_L = 1200; // pwm values
-				pwmVal_R = 0;
-				servoVal = 290; //set servo dir
-				motorActivate();
-//				sprintf(icmTempMsg,"%+09d,",gyrosum);
-//				HAL_UART_Transmit(&huart3, (uint8_t *)&icmTempMsg, 10, 0xFFFF);
-			}
+
+	uint32_t servo = 150;
+	uint32_t pwmL = 4000;
+	uint32_t pwmR = 4000;
+	uint32_t pulseTarget = 1560;
+	double ppmsTarget = 6;
+
+	// FORWARD
+	uint32_t pulseTotal = 0, pulseTotalL = 0, pulseTotalR = 0;
+	uint32_t timeStampPrev, timeStampCurr, timeStampDiff;
+	uint32_t pulsePrevL, pulseCurrL, pulseDiffL;
+	uint32_t pulsePrevR, pulseCurrR, pulseDiffR;
+	double ppmsL, ppmsR;
+	uint32_t ratio = PPMS_TO_PWM_RATIO;
+
+	InitMotor(dir);  // initialize motors
+	htim1.Instance->CCR4 = servo;  // set default servo value
+
+	pulsePrevL = __HAL_TIM_GET_COUNTER(&htim2);  // get initial pulse
+	pulsePrevR = __HAL_TIM_GET_COUNTER(&htim3); // get initial pulse
+
+	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, pwmL);  // start motor L
+	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, pwmL);  // start motor R
+	timeStampPrev = HAL_GetTick();  // get initial time stamp
+
+	gyrosumsigned = 0;
+	SuddenBreak = 0;
+
+	// Movement loop
+	while (pulseTotal < pulseTarget)
+	{
+		osDelay(FORWARD_DELAY);  // delta time
+
+		timeStampCurr = HAL_GetTick();
+		pulseCurrL = __HAL_TIM_GET_COUNTER(&htim2);
+		pulseCurrR = __HAL_TIM_GET_COUNTER(&htim3);
+
+		timeStampDiff = timeStampCurr - timeStampPrev;
+		timeStampPrev = timeStampCurr;
+
+		// Update delta pulse
+		// FORWARD: left pulse --, right pulse ++
+		// BACKWARD: left pulse ++, right pulse --
+		if (dir == FORWARD_DIR)
+		{
+			pulseDiffL = (pulseCurrL <= pulsePrevL) ? pulsePrevL - pulseCurrL : (65535 - pulseCurrL) + pulsePrevL + 1;
+			pulseDiffR = (pulseCurrR >= pulsePrevR) ? pulseCurrR - pulsePrevR : (65535 - pulsePrevR) + pulseCurrR + 1;
+		}
+		else  // backward
+		{
+			pulseDiffL = (pulseCurrL >= pulsePrevL) ? pulseCurrL - pulsePrevL : (65535 - pulsePrevL) + pulseCurrL + 1;
+			pulseDiffR = (pulseCurrR <= pulsePrevR) ? pulsePrevR - pulseCurrR : (65535 - pulseCurrR) + pulsePrevR + 1;
+		}
+		pulsePrevL = pulseCurrL;
+		pulsePrevR = pulseCurrR;
+
+		ppmsL = pulseDiffL * 1.0 / timeStampDiff;
+		ppmsR = pulseDiffR * 1.0 / timeStampDiff;
+
+		// Adjust PWM
+		if ((ppmsL < ppmsTarget && ppmsL < ppmsR) || (ppmsL > ppmsTarget && ppmsL > ppmsR))
+		{
+			pwmL = AdjustPWM(pwmL, ppmsL, ppmsTarget, ratio);
+		}
+		if ((ppmsR < ppmsTarget && ppmsR < ppmsL) || (ppmsR > ppmsTarget && ppmsR > ppmsL))
+		{
+			pwmR = AdjustPWM(pwmR, ppmsR, ppmsTarget, ratio);
+		}
+
+		pulseTotalL += pulseDiffL;
+		pulseTotalR += pulseDiffR;
+		pulseTotal = (pulseTotalL + pulseTotalR) / 2;
+
+		__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, pwmL);  // update
+		__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, pwmR);  // update
+
+		int8_t sign = dir == FORWARD_DIR ? 1 : -1;
+
+		if (gyrosumsigned * sign > 120)
+		{
+			gyrosumsigned = 0;
+			servo = servo + 1 <= SERVO_MAX ? servo + 1 : servo;
+			htim1.Instance->CCR4 = servo;
+		}
+		else if (gyrosumsigned * sign < -120)
+		{
+			gyrosumsigned = 0;
+			servo = servo - 1 > SERVO_MIN ? servo - 1 : servo;
+			htim1.Instance->CCR4 = servo;
+		}
+	}
+
+	// RIGHT
+	gyrosum = 0;
+	htim1.Instance->CCR4 = 210;
+	osDelay(300);
+	while (gyrosum<=(30*245*4)){
+		duration = 10;
+		pwmVal_L = 3000; // pwm values 1200
+		pwmVal_R = 300; // 2400
+		servoVal = 290; //set servo dir
+		motorActivate();
 	}
 	realignWheels();
 	HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
@@ -2261,6 +2332,7 @@ void uart(void *argument)
 		  		  	uint8_t DistBuffer[20];
 		  		  	sprintf(DistBuffer,"%d\n",Distance);
 		  		  	HAL_UART_Transmit(&huart3, (uint8_t *)&DistBuffer, 10, 0xFFFF);
+		  		  	LFR(10);
 		  		  }
 
 		  if(strcmp(pch,"TURN")==0){ //IF TURN
