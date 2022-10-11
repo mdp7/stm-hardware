@@ -148,6 +148,7 @@ uint8_t distprof = 0;
 uint8_t servodefault = 150;
 uint8_t correctionleft = 147, correctionright = 152;
 uint8_t lastservo = 150;
+uint8_t SuddenBreak = 0;
 
 //Ultrasonic
 uint32_t IC_Val1 = 0;
@@ -947,16 +948,16 @@ void InitMotor(uint8_t dir)
 	}
 }
 
-uint32_t AdjustPWM(uint32_t pwmPrev, double ppmsActual, double ppmsTarget)
+uint32_t AdjustPWM(uint32_t pwmPrev, double ppmsActual, double ppmsTarget, uint8_t ratio)
 {
 	uint32_t pwm = pwmPrev;
 	if (ppmsTarget - ppmsActual > PPMS_THRESHOLD)
 	{
-		pwm += (ppmsTarget - ppmsActual) * PPMS_TO_PWM_RATIO;
+		pwm += (ppmsTarget - ppmsActual) * ratio;
 	}
 	else if (ppmsActual - ppmsTarget > PPMS_THRESHOLD)
 	{
-		pwm -= (ppmsActual - ppmsTarget) * PPMS_TO_PWM_RATIO;
+		pwm -= (ppmsActual - ppmsTarget) * ratio;
 	}
 	pwm = pwm < PWM_MIN ? PWM_MIN : pwm;
 	pwm = pwm > PWM_MAX ? PWM_MAX : pwm;
@@ -979,6 +980,7 @@ void StraightMovement(
 	uint32_t pulsePrevL, pulseCurrL, pulseDiffL;
 	uint32_t pulsePrevR, pulseCurrR, pulseDiffR;
 	double ppmsL, ppmsR;
+	uint32_t ratio = PPMS_TO_PWM_RATIO;
 
 	InitMotor(dir);  // initialize motors
 	htim1.Instance->CCR4 = servo;  // set default servo value
@@ -993,10 +995,20 @@ void StraightMovement(
 
 //	StartSum();
 	gyrosumsigned = 0;
+	SuddenBreak = 0;
 
 	// Movement loop
 	while (pulseTotal < pulseTarget)
 	{
+		if (SuddenBreak)
+		{
+			break;
+		}
+		if (pulseTotal >= PPMS_REDUCE_PULSE_RATIO * pulseTarget)
+		{
+			ppmsTarget *= PPMS_REDUCE_RATIO;
+		}
+
 		osDelay(FORWARD_DELAY);  // delta time
 
 		timeStampCurr = HAL_GetTick();
@@ -1028,11 +1040,11 @@ void StraightMovement(
 		// Adjust PWM
 		if ((ppmsL < ppmsTarget && ppmsL < ppmsR) || (ppmsL > ppmsTarget && ppmsL > ppmsR))
 		{
-			pwmL = AdjustPWM(pwmL, ppmsL, ppmsTarget);
+			pwmL = AdjustPWM(pwmL, ppmsL, ppmsTarget, ratio);
 		}
 		if ((ppmsR < ppmsTarget && ppmsR < ppmsL) || (ppmsR > ppmsTarget && ppmsR > ppmsL))
 		{
-			pwmR = AdjustPWM(pwmR, ppmsR, ppmsTarget);
+			pwmR = AdjustPWM(pwmR, ppmsR, ppmsTarget, ratio);
 		}
 
 		pulseTotalL += pulseDiffL;
@@ -1409,6 +1421,55 @@ void turn(uint8_t local_dir, int leftright, int angle){
 }
 
 void gyroturn(uint8_t local_dir, int leftright, int angle){ //23,580 for 90 degrees
+	gyrosum = 0;
+	dir = local_dir;
+	if(leftright==0) htim1.Instance->CCR4 = 105;
+	else htim1.Instance->CCR4 = 210;
+	osDelay(700);
+	while (gyrosum<=(angle*245*4*0.7)){
+			if(leftright==0){//left
+				duration = 10;
+				pwmVal_L = 1200; // pwm values 1200
+				pwmVal_R = 2400; // 2400
+				servoVal = 100; //set servo dir
+				motorActivate();
+//				sprintf(icmTempMsg,"%+09d,",gyrosum);
+//				HAL_UART_Transmit(&huart3, (uint8_t *)&icmTempMsg, 10, 0xFFFF);
+			}else{//right
+				duration = 10;
+				pwmVal_L = 2400; // pwm values
+				pwmVal_R = 0;
+				servoVal = 290; //set servo dir
+				motorActivate();
+//				sprintf(icmTempMsg,"%+09d,",gyrosum);
+//				HAL_UART_Transmit(&huart3, (uint8_t *)&icmTempMsg, 10, 0xFFFF);
+			}
+	}
+	while (gyrosum<=(angle*245*4)){ //last 30%
+			if(leftright==0){//left
+				duration = 10;
+				pwmVal_L = 600; // pwm values
+				pwmVal_R = 1200;
+				servoVal = 100; //set servo dir
+				motorActivate();
+//				sprintf(icmTempMsg,"%+09d,",gyrosum);
+//				HAL_UART_Transmit(&huart3, (uint8_t *)&icmTempMsg, 10, 0xFFFF);
+			}else{//right
+				duration = 10;
+				pwmVal_L = 1200; // pwm values
+				pwmVal_R = 0;
+				servoVal = 290; //set servo dir
+				motorActivate();
+//				sprintf(icmTempMsg,"%+09d,",gyrosum);
+//				HAL_UART_Transmit(&huart3, (uint8_t *)&icmTempMsg, 10, 0xFFFF);
+			}
+	}
+	realignWheels();
+	HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
+}
+
+void TFT(uint8_t local_dir, int leftright, int angle)
+{ //23,580 for 90 degrees
 	gyrosum = 0;
 	dir = local_dir;
 	if(leftright==0) htim1.Instance->CCR4 = 105;
@@ -2161,6 +2222,9 @@ void ultra(void *argument)
   {
 	  HCSR04_Read();
 	  	osDelay(100);
+	  	if (Distance < SUDDEN_BREAK_DIST) {
+	  		SuddenBreak = 1;
+	  	}
   }
   /* USER CODE END ultra */
 }
