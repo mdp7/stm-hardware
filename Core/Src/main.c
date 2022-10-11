@@ -148,15 +148,13 @@ uint8_t distprof = 0;
 uint8_t servodefault = 150;
 uint8_t correctionleft = 147, correctionright = 152;
 uint8_t lastservo = 150;
-uint8_t entered = 0;
 
 //Ultrasonic
 uint32_t IC_Val1 = 0;
 uint32_t IC_Val2 = 0;
 uint32_t Difference = 0;
 uint8_t Is_First_Captured = 0;  // is the first value captured ?
-uint8_t Distance  = 1;
-uint8_t sensordist = 0;
+uint8_t Distance  = 0;
 
 //For Profile Switching
 uint8_t userBtnCount = 0;
@@ -291,7 +289,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+	HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -368,6 +366,7 @@ int main(void)
   /* USER CODE BEGIN RTOS_EVENTS */
   /* add events, ... */
   /* USER CODE END RTOS_EVENTS */
+  HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
 
   /* Start scheduler */
   osKernelStart();
@@ -652,7 +651,7 @@ static void MX_TIM4_Init(void)
 
   /* USER CODE END TIM4_Init 1 */
   htim4.Instance = TIM4;
-  htim4.Init.Prescaler = 7;
+  htim4.Init.Prescaler = 16-1;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim4.Init.Period = 0xffff-1;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -913,6 +912,22 @@ void resetgyrosumsigned()
 {
 	gyrosumsigned = 0;
 }
+
+void delay (uint16_t us)
+{
+	__HAL_TIM_SET_COUNTER(&htim4,0);  // set the counter value a 0
+	while (__HAL_TIM_GET_COUNTER(&htim4) < us);  // wait for the counter to reach the us input in the parameter
+}
+
+void HCSR04_Read (void)
+{
+	HAL_GPIO_WritePin(TRIG_GPIO_Port, TRIG_Pin, GPIO_PIN_SET);  // pull the TRIG pin HIGH
+	delay(10);  // wait for 10 us
+	HAL_GPIO_WritePin(TRIG_GPIO_Port, TRIG_Pin, GPIO_PIN_RESET);  // pull the TRIG pin low
+
+	__HAL_TIM_ENABLE_IT(&htim1, TIM_IT_CC1);
+}
+
 void InitMotor(uint8_t dir)
 {
 	// set motor directions
@@ -1070,12 +1085,6 @@ void StraightMovement(
 //	ResetSum();
 }
 
-void delay (uint16_t us)
-{
-	__HAL_TIM_SET_COUNTER(&htim1,0);  // set the counter value a 0
-	while (__HAL_TIM_GET_COUNTER(&htim1) < us);  // wait for the counter to reach the us input in the parameter
-}
-
 uint32_t DistanceToPulse(double distance)
 {
 	uint32_t pulse = ((PULSE_PER_REVOLUTION * distance))/ WHEEL_C - FORWARD_SLIDE_PULSE;
@@ -1110,7 +1119,7 @@ void realignWheels(){
 //	htim1.Instance->CCR4 = 220; //right
 //	osDelay(400);
 	htim1.Instance->CCR4 = DEFAULT_FORWARD_SERVO; //left
-	osDelay(600);
+	osDelay(250);
 //	htim1.Instance->CCR4 = ; //center
 }
 
@@ -1219,9 +1228,9 @@ void gyrostraight(double local_pwmVal_L, double local_pwmVal_R, uint8_t local_di
 	while(curduration<=reqduration){
 		servoVal = 150;
 		pwmVal_L = 1800;
-				pwmVal_R = 2000;
-				duration = 30;
-				motorActivate();
+		pwmVal_R = 2000;
+		duration = 30;
+		motorActivate();
 
 
 		sprintf(icmTempMsg,"G:%+07d,",gyro[2]);
@@ -1443,6 +1452,8 @@ void gyroturn(uint8_t local_dir, int leftright, int angle){ //23,580 for 90 degr
 //				HAL_UART_Transmit(&huart3, (uint8_t *)&icmTempMsg, 10, 0xFFFF);
 			}
 	}
+	realignWheels();
+	HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
 }
 
 void tpturn(int leftright){
@@ -1890,7 +1901,6 @@ void ICMInit()
 
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
-	entered=1;
 	if (htim->Instance==htim4.Instance && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)  // if the interrupt source is channel1
 	{
 		if (Is_First_Captured==0) // if the first value is not captured
@@ -1924,15 +1934,6 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 //			__HAL_TIM_DISABLE_IT(&htim4, TIM_IT_CC1);
 		}
 	}
-}
-
-void HCSR04_Read (void)
-{
-	HAL_GPIO_WritePin(TRIG_GPIO_Port, TRIG_Pin, GPIO_PIN_SET);  // pull the TRIG pin HIGH
-	delay(10);  // wait for 10 us
-	HAL_GPIO_WritePin(TRIG_GPIO_Port, TRIG_Pin, GPIO_PIN_RESET);  // pull the TRIG pin low
-
-	__HAL_TIM_ENABLE_IT(&htim1, TIM_IT_CC1);
 }
 
 
@@ -2152,21 +2153,14 @@ void encoder(void *argument)
 /* USER CODE END Header_ultra */
 void ultra(void *argument)
 {
-	//uint8_t hello[20];
-
   /* USER CODE BEGIN ultra */
   /* Infinite loop */
 
 	__HAL_TIM_ENABLE_IT(&htim4, TIM_IT_CC1);
-//	HAL_TIM_IC_START_IT(&htim4, TIM_CHANNEL_1);
-
-	for(;;)
+  for(;;)
   {
-		HCSR04_Read();
-		sensordist=Distance;
-		//sprintf(hello,"Dist:%5d",sensordist);
-		//OLED_ShowString(70,50,hello);
-		osDelay(60);
+	  HCSR04_Read();
+	  	osDelay(100);
   }
   /* USER CODE END ultra */
 }
@@ -2198,59 +2192,36 @@ void uart(void *argument)
 			  HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
 
 		  }
-		  if(strcmp(pch, "FORWARD")==0){
-			  dir=1;
-		  }else{
-			  dir=0;
-		  }
 
-		  pch = strtok (NULL, " ");
+		  if(strcmp(pch,"DIST")==0){
+		  		  	uint8_t DistBuffer[20];
+		  		  	sprintf(DistBuffer,"%d\n",Distance);
+		  		  	HAL_UART_Transmit(&huart3, (uint8_t *)&DistBuffer, 10, 0xFFFF);
+		  		  }
 
 		  if(strcmp(pch,"TURN")==0){ //IF TURN
 			  pch = strtok (NULL, " "); //Next word first
 			  if(strcmp(pch,"LEFT")==0){//IF TURN LEFT
-				  //if (dir=1) //straight(DEFAULTPWM,DEFAULTPWM,1,50);
-				  ipt90(0); //shud be close to 10cm turn radius
-				  //gyroturn(dir,0,90);
-				  //gyroturn(dir, 0, 90);
-				  //straight(DEFAULTPWM, DEFAULTPWM, 1, 10);
-				  //HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
+				  pch = strtok (NULL," ");
+				  gyroturn(1,0,atoi(pch));
 			  }
-			  if(strcmp(pch,"LEFFT")==0){//IF TURN LEFT 180
-				  gyroturn(dir,0,180);
-			  }
-			  if(strcmp(pch,"LEFFFT")==0){//IF TURN LEFT 270
-				  gyroturn(dir,0,270);
-			  }
+
 			  if(strcmp(pch,"RIGHT")==0){//IF TURN RIGHT
-				  //turn2(dir);
-
-				  ipt90(1); // 10cm turn radius
-				  //gyroturn(dir,1,90);
-				  //gyroturn(dir,1,90);
-				  //HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
+				  pch = strtok (NULL," ");
+				  gyroturn(1,1,atoi(pch));
 			  }
-			  if(strcmp(pch,"RIGHHT")==0){//IF TURN RIGHT 180
-			  				  gyroturn(dir,1,180);
-			  			  }
-			  if(strcmp(pch,"RIGHHHT")==0){//IF TURN RIGHT 270
-			  				  gyroturn(dir,1,270);
-			  			  }
 		  }
-		  else if(strcmp(pch,"MOVE")==0){
+		  else if(strcmp(pch,"FORWARD")==0){
 			  pch = strtok (NULL, " "); //Next word first
-			  if (dir==0){
-//				  straight(4500,4500,dir,atoi(pch));
-				  Straight(BACKWARD_DIR, atoi(pch), 1, 150);
-			  }else{
-				  Straight(FORWARD_DIR, atoi(pch), 1, 150);
-				  //gyrostraight(4500,DEFAULTPWM,dir,atoi(pch));
-				  //gyrostraight(2250,2500,dir,atoi(pch));
-				  //gyrostraight(5000,DEFAULTPWM,dir,atoi(pch));
+			  pch = strtok (NULL, " "); //Next word first
+			  Straight(FORWARD_DIR, atoi(pch), 1, 150);
 
-			  }
-
+		  }else if(strcmp(pch,"BACKWARD")==0){
+			  pch = strtok (NULL, " "); //Next word first
+			  pch = strtok (NULL, " "); //Next word first
+			  Straight(FORWARD_DIR, atoi(pch), 1, 150);
 		  }
+
 
 		  for(int i =0; i<20;i++){
 			  sprintf(aRxBuffer[i], ' ');
