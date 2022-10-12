@@ -156,6 +156,7 @@ uint32_t IC_Val2 = 0;
 uint32_t Difference = 0;
 uint8_t Is_First_Captured = 0;  // is the first value captured ?
 uint8_t Distance  = 0;
+uint8_t DistBuffer[20] = {};
 
 //For Profile Switching
 uint8_t userBtnCount = 0;
@@ -974,13 +975,11 @@ void StraightMovement(
 		uint8_t willTransmit
 		)
 {
-	char oledBuffer1[20], oledBuffer2[20], oledBuffer3[20], oledBuffer4[20];
 	uint32_t pulseTotal = 0, pulseTotalL = 0, pulseTotalR = 0;
 	uint32_t timeStampPrev, timeStampCurr, timeStampDiff;
 	uint32_t pulsePrevL, pulseCurrL, pulseDiffL;
 	uint32_t pulsePrevR, pulseCurrR, pulseDiffR;
 	double ppmsL, ppmsR;
-	uint32_t ratio = PPMS_TO_PWM_RATIO;
 
 	InitMotor(dir);  // initialize motors
 	htim1.Instance->CCR4 = servo;  // set default servo value
@@ -993,9 +992,7 @@ void StraightMovement(
 	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, pwmR);  // start motor R
 	timeStampPrev = HAL_GetTick();  // get initial time stamp
 
-//	StartSum();
 	gyrosumsigned = 0;
-	SuddenBreak = 0;
 
 	if (pulseTarget <= 30 * PULSE_PER_REVOLUTION / WHEEL_C)
 	{
@@ -1005,17 +1002,9 @@ void StraightMovement(
 	// Movement loop
 	while (pulseTotal < pulseTarget)
 	{
-		if (SuddenBreak)
-		{
-			break;
-		}
 		if (pulseTotal >= pulseTarget - PPMS_REDUCE_PULSE_DIST * PULSE_PER_REVOLUTION / WHEEL_C)
 		{
-			ppmsTarget -= PPMS_REDUCE_VALUE;
-			if (ppmsTarget < 1)
-			{
-				ppmsTarget = 1;
-			}
+			ppmsTarget = ppmsTarget - PPMS_REDUCE_VALUE < 1 ? 1 : ppmsTarget - PPMS_REDUCE_VALUE;
 		}
 
 		osDelay(FORWARD_DELAY);  // delta time
@@ -1070,25 +1059,13 @@ void StraightMovement(
 			gyrosumsigned = 0;
 			servo = servo + 1 <= SERVO_MAX ? servo + 1 : servo;
 			htim1.Instance->CCR4 = servo;
-//			StartSum();
 		}
 		else if (gyrosumsigned * sign < -120)
 		{
 			gyrosumsigned = 0;
 			servo = servo - 1 > SERVO_MIN ? servo - 1 : servo;
 			htim1.Instance->CCR4 = servo;
-//			StartSum();
 		}
-
-		// Display
-//		sprintf(oledBuffer1, "PWM%5lu/%5lu", pwmL, pwmR);
-//		sprintf(oledBuffer2, "PPM%5.2f/%5.2f", ppmsL, ppmsR);
-//		sprintf(oledBuffer3, "PUL%5ld/%5ld", pulseTotalL, pulseTotalR);
-//		sprintf(oledBuffer4, "SER%5ld/%5ld", servo, pulseTarget);
-//		OLED_ShowString(0,  0, (uint8_t*) oledBuffer1);
-//		OLED_ShowString(0, 12, (uint8_t*) oledBuffer2);
-//		OLED_ShowString(0, 24, (uint8_t*) oledBuffer3);
-//		OLED_ShowString(0, 36, (uint8_t*) oledBuffer4);
 	}
 	// Stop motors
 	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
@@ -1100,10 +1077,6 @@ void StraightMovement(
 	if(willTransmit == 1){
 		HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
 	}
-
-
-
-//	ResetSum();
 }
 
 uint32_t DistanceToPulse(double distance)
@@ -1140,7 +1113,7 @@ void realignWheels(){
 //	htim1.Instance->CCR4 = 220; //right
 //	osDelay(400);
 	htim1.Instance->CCR4 = DEFAULT_FORWARD_SERVO; //left
-	osDelay(250);
+	osDelay(350);
 //	htim1.Instance->CCR4 = ; //center
 }
 
@@ -1158,7 +1131,7 @@ void motorActivate(){
 		HAL_GPIO_WritePin(GPIOA,AIN2_Pin,GPIO_PIN_SET);
 		HAL_GPIO_WritePin(GPIOA,BIN2_Pin,GPIO_PIN_SET);
 	}
-	htim1.Instance->CCR4 = servoVal;
+//	htim1.Instance->CCR4 = servoVal;
 //	osDelay(400);
 
 	uint32_t tick = HAL_GetTick();
@@ -1169,6 +1142,7 @@ void motorActivate(){
 	while((HAL_GetTick()-tick)<=(duration)){
 		__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1,pwml);
 		__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2,pwmr);
+		htim1.Instance->CCR4 = servoVal;
 	}
 
 	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1,0);
@@ -1432,42 +1406,45 @@ void turn(uint8_t local_dir, int leftright, int angle){
 void gyroturn(uint8_t local_dir, int leftright, int angle){ //23,580 for 90 degrees
 	gyrosum = 0;
 	dir = local_dir;
-	if(leftright==0) htim1.Instance->CCR4 = 105;
-	else htim1.Instance->CCR4 = 210;
+//	if(leftright==0) htim1.Instance->CCR4 = 100;
+//	else htim1.Instance->CCR4 = 200;
 	osDelay(700);
-	while (gyrosum<=(angle*245*4*0.7)){
+	double leftsum = angle*200*4;
+	double rightsum = angle*200*4;
+	double sum = leftright == 0 ? leftsum : rightsum;
+	while (gyrosum<=(sum*0.8)){
 			if(leftright==0){//left
 				duration = 10;
-				pwmVal_L = 1200; // pwm values 1200
-				pwmVal_R = 2400; // 2400
+				pwmVal_L = 2500; // pwm values 1200
+				pwmVal_R = 5000; // 2400
 				servoVal = 100; //set servo dir
 				motorActivate();
 //				sprintf(icmTempMsg,"%+09d,",gyrosum);
 //				HAL_UART_Transmit(&huart3, (uint8_t *)&icmTempMsg, 10, 0xFFFF);
 			}else{//right
 				duration = 10;
-				pwmVal_L = 2400; // pwm values
-				pwmVal_R = 0;
-				servoVal = 290; //set servo dir
+				pwmVal_L = 5000; // pwm values
+				pwmVal_R = 2500;
+				servoVal = 250; //set servo dir
 				motorActivate();
 //				sprintf(icmTempMsg,"%+09d,",gyrosum);
 //				HAL_UART_Transmit(&huart3, (uint8_t *)&icmTempMsg, 10, 0xFFFF);
 			}
 	}
-	while (gyrosum<=(angle*245*4)){ //last 30%
+	while (gyrosum<=(sum)){ //last 30%
 			if(leftright==0){//left
 				duration = 10;
-				pwmVal_L = 600; // pwm values
-				pwmVal_R = 1200;
+				pwmVal_L = 900; // pwm values
+				pwmVal_R = 1700;
 				servoVal = 100; //set servo dir
 				motorActivate();
 //				sprintf(icmTempMsg,"%+09d,",gyrosum);
 //				HAL_UART_Transmit(&huart3, (uint8_t *)&icmTempMsg, 10, 0xFFFF);
 			}else{//right
 				duration = 10;
-				pwmVal_L = 1200; // pwm values
-				pwmVal_R = 0;
-				servoVal = 290; //set servo dir
+				pwmVal_L = 1800; // pwm values
+				pwmVal_R = 1000;
+				servoVal = 250; //set servo dir
 				motorActivate();
 //				sprintf(icmTempMsg,"%+09d,",gyrosum);
 //				HAL_UART_Transmit(&huart3, (uint8_t *)&icmTempMsg, 10, 0xFFFF);
@@ -1962,8 +1939,6 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
 	//prevent unused argument(s) compilation warning
 	UNUSED(huart);
-	HAL_UART_Receive_IT(&huart3, (uint8_t *) aRxBuffer, 20);
-	HAL_UART_Transmit(&huart3,(uint8_t *)aRxBuffer, 20, 0xFFFF);
 
 }
 /* USER CODE END 4 */
@@ -2181,11 +2156,11 @@ void ultra(void *argument)
   for(;;)
   {
 	  HCSR04_Read();
-	  	osDelay(100);
-	  	if (Distance < SUDDEN_BREAK_DIST) {
-	  		SuddenBreak = 1;
-	  	}
+	  sprintf(DistBuffer,"%d\n",Distance);
+
+	  	osDelay(30);
   }
+
   /* USER CODE END ultra */
 }
 
@@ -2218,11 +2193,8 @@ void uart(void *argument)
 		  }
 
 		  if(strcmp(pch,"DIST")==0){
-			  *aRxBuffer = " ";
-			  pch = malloc(20);
-		  		  	uint8_t DistBuffer[20];
-		  		  	sprintf(DistBuffer,"%d\n",Distance);
-		  		  	HAL_UART_Transmit(&huart3, (uint8_t *)&DistBuffer, 10, 0xFFFF);
+
+		  		  	HAL_UART_Transmit(&huart3, (uint8_t *)&DistBuffer, 5, 0xFFFF);
 		  		  }
 
 		  if(strcmp(pch,"TURN")==0){ //IF TURN
@@ -2253,7 +2225,7 @@ void uart(void *argument)
 			  sprintf(aRxBuffer[i], ' ');
 		  } //????? DOES THIS EVEN WORK
 
-    osDelay(100);
+    osDelay(10);
   }
   /* USER CODE END uart */
 }
