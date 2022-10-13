@@ -1949,31 +1949,43 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
 	// prevent unused argument(s) compilation warning
 	UNUSED(huart);
 	HAL_UART_Receive_IT(&huart3, (uint8_t *) aRxBuffer, 20);
-	char val[2];
-	int vint;
+	char val[3];
+	int vint = 0;
 	if (strncmp(aRxBuffer, "FORWARD", 7) == 0)
 	{
-		for (int ii = 0; ii < 3; ii++) {
-			val[ii] = aRxBuffer[13 + ii];
-		}
-		vint = atoi(val);
+		if ('0' <= aRxBuffer[13] && aRxBuffer[13] <= '9')
+			vint += (aRxBuffer[13] - '0') * 100;
+		if ('0' <= aRxBuffer[14] && aRxBuffer[14] <= '9')
+			vint += (aRxBuffer[14] - '0') * 10;
+		if ('0' <= aRxBuffer[15] && aRxBuffer[15] <= '9')
+			vint += (aRxBuffer[15] - '0') * 1;
+		else
+			vint /= 10;
 		Command = COMMAND_FORWARD;
 		CommandVal = vint;
 	}
 	else if (strncmp(aRxBuffer, "TURN", 4) == 0) {
 		if (strncmp(aRxBuffer + 5, "LEFT", 4) == 0) {
-			for (int ii = 0; ii < 2; ii++) {
-				val[ii] = aRxBuffer[10 + ii];
-			}
-			vint = atoi(val);
+			if ('0' <= aRxBuffer[10] && aRxBuffer[10] <= '9')
+				vint += (aRxBuffer[10] - '0') * 100;
+			if ('0' <= aRxBuffer[11] && aRxBuffer[11] <= '9')
+				vint += (aRxBuffer[11] - '0') * 10;
+			if ('0' <= aRxBuffer[12] && aRxBuffer[12] <= '9')
+				vint += (aRxBuffer[12] - '0') * 1;
+			else
+				vint /= 10;
 			Command = COMMAND_LEFT;
 			CommandVal = vint;
 		}
 		else if (strncmp(aRxBuffer + 5, "RIGHT", 5) == 0) {
-			for (int ii = 0; ii < 2; ii++) {
-				val[ii] = aRxBuffer[11 + ii];
-			}
-			vint = atoi(val);
+			if ('0' <= aRxBuffer[11] && aRxBuffer[11] <= '9')
+				vint += (aRxBuffer[11] - '0') * 100;
+			if ('0' <= aRxBuffer[12] && aRxBuffer[12] <= '9')
+				vint += (aRxBuffer[12] - '0') * 10;
+			if ('0' <= aRxBuffer[13] && aRxBuffer[13] <= '9')
+				vint += (aRxBuffer[13] - '0') * 1;
+			else
+				vint /= 10;
 			Command = COMMAND_RIGHT;
 			CommandVal = vint;
 		}
@@ -1983,7 +1995,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
 		CommandVal = 0;
 	}
 	uint8_t disp2[20];
-	sprintf(disp2,"%s",aRxBuffer);
+	sprintf(disp2,"Val: %05d",CommandVal);
 	OLED_ShowString(0,40,disp2);
 }
 /* USER CODE END 4 */
@@ -2040,8 +2052,6 @@ void show(void *argument)
 
 
 
-	sprintf(disp2,"%s",aRxBuffer);
-	OLED_ShowString(0,40,disp2);
 
 //Ultrasonic Distance reading
 	sprintf(disp,"Dist:%5d",Distance);
