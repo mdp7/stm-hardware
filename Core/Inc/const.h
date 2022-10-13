@@ -13,7 +13,7 @@
 #define FORWARD_DIR 0
 #define BACKWARD_DIR 1
 
-#define PWM_MIN 0
+#define PWM_MIN 1000
 #define PWM_MAX 6000  // TODO
 #define SERVO_MIN 50
 #define SERVO_MAX 280
@@ -33,8 +33,8 @@
 //#define DEFAULT_FORWARD_PWM_R 2400  // TODO: test on lab floor
 //#define DEFAULT_FORWARD_PWM_L 1500  // TODO: test on lab floor
 //#define DEFAULT_FORWARD_PWM_R 1650  // TODO: test on lab floor
-#define DEFAULT_FORWARD_PWM_L 4000  // TODO: test on lab floor
-#define DEFAULT_FORWARD_PWM_R 4250  // TODO: test on lab floor
+#define DEFAULT_FORWARD_PWM_L 2500  // TODO: test on lab floor
+#define DEFAULT_FORWARD_PWM_R 2700  // TODO: test on lab floor
 #define FORWARD_SLIDE_PULSE 0  // OFFSET
 
 
@@ -43,12 +43,13 @@
 // x pulse/ms = (x / 1560) revolution/ms = (6 * pi * x / 1560) cm/ms
 // 3 pulse/ms = 0.002 revolution/ms = 0.036 cm/ms
 // 6 pulse/ms = 0.004 revolution/ms = 0.072 cm/ms = 0.725 m/s
-#define FORWARD_PULSE_PER_MS 6  // 0.85 m/s
+#define FORWARD_PULSE_PER_MS 5  // 0.85 m/s
 #define PPMS_THRESHOLD 0.01
-#define PPMS_TO_PWM_RATIO 52  // HOW FAST THE SPEED IS CHANGING
+#define PPMS_TO_PWM_INCREASE_RATIO 20
+#define PPMS_TO_PWM_RATIO 55  // HOW FAST THE SPEED IS CHANGING
 #define FORWARD_DELAY 10
-#define PPMS_REDUCE_PULSE_RATIO 0.58
-#define PPMS_REDUCE_RATIO 0.58
+#define PPMS_REDUCE_PULSE_DIST 30
+#define PPMS_REDUCE_VALUE 1
 #define SUDDEN_BREAK_DIST 20
 
 // Gyro
