@@ -156,11 +156,19 @@ uint32_t IC_Val2 = 0;
 uint32_t Difference = 0;
 uint8_t Is_First_Captured = 0;  // is the first value captured ?
 uint8_t Distance  = 0;
-uint8_t DistBuffer[20] = {};
+uint8_t DistBuffer[5] = {};
 
 //For Profile Switching
 uint8_t userBtnCount = 0;
 uint8_t enableSw = 0;
+
+#define COMMAND_NULL 0
+#define COMMAND_FORWARD 1
+#define COMMAND_LEFT 2
+#define COMMAND_RIGHT 3
+#define COMMAND_DIST 4
+uint8_t Command = COMMAND_NULL;
+int CommandVal = 0;
 
 //For Gyro
 /* define ICM-20948 Device I2C address*/
@@ -318,6 +326,8 @@ int main(void)
   HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_1);
 
   HAL_UART_Transmit_IT(&huart3, (uint8_t *) aRxBuffer, 50);
+
+	HAL_UART_Receive_IT(&huart3, (uint8_t *) aRxBuffer, 20);
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -368,7 +378,6 @@ int main(void)
   /* USER CODE BEGIN RTOS_EVENTS */
   /* add events, ... */
   /* USER CODE END RTOS_EVENTS */
-  HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
 
   /* Start scheduler */
   osKernelStart();
@@ -1409,7 +1418,7 @@ void gyroturn(uint8_t local_dir, int leftright, int angle){ //23,580 for 90 degr
 //	if(leftright==0) htim1.Instance->CCR4 = 100;
 //	else htim1.Instance->CCR4 = 200;
 	osDelay(700);
-	double leftsum = angle*200*4;
+	double leftsum = angle*201*4;
 	double rightsum = angle*200*4;
 	double sum = leftright == 0 ? leftsum : rightsum;
 	while (gyrosum<=(sum*0.8)){
@@ -1937,9 +1946,45 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
-	//prevent unused argument(s) compilation warning
+	// prevent unused argument(s) compilation warning
 	UNUSED(huart);
-
+	HAL_UART_Receive_IT(&huart3, (uint8_t *) aRxBuffer, 20);
+	char val[2];
+	int vint;
+	if (strncmp(aRxBuffer, "FORWARD", 7) == 0)
+	{
+		for (int ii = 0; ii < 3; ii++) {
+			val[ii] = aRxBuffer[13 + ii];
+		}
+		vint = atoi(val);
+		Command = COMMAND_FORWARD;
+		CommandVal = vint;
+	}
+	else if (strncmp(aRxBuffer, "TURN", 4) == 0) {
+		if (strncmp(aRxBuffer + 5, "LEFT", 4) == 0) {
+			for (int ii = 0; ii < 2; ii++) {
+				val[ii] = aRxBuffer[10 + ii];
+			}
+			vint = atoi(val);
+			Command = COMMAND_LEFT;
+			CommandVal = vint;
+		}
+		else if (strncmp(aRxBuffer + 5, "RIGHT", 5) == 0) {
+			for (int ii = 0; ii < 2; ii++) {
+				val[ii] = aRxBuffer[11 + ii];
+			}
+			vint = atoi(val);
+			Command = COMMAND_RIGHT;
+			CommandVal = vint;
+		}
+	}
+	else if (strncmp(aRxBuffer, "DIST", 4) == 0) {
+		Command = COMMAND_DIST;
+		CommandVal = 0;
+	}
+	uint8_t disp2[20];
+	sprintf(disp2,"%s",aRxBuffer);
+	OLED_ShowString(0,40,disp2);
 }
 /* USER CODE END 4 */
 
@@ -2156,9 +2201,8 @@ void ultra(void *argument)
   for(;;)
   {
 	  HCSR04_Read();
-	  sprintf(DistBuffer,"%d\n",Distance);
-
-	  	osDelay(30);
+	  //sprintf(DistBuffer,"%d\n",Distance);
+	  osDelay(30);
   }
 
   /* USER CODE END ultra */
@@ -2178,54 +2222,27 @@ void uart(void *argument)
 
   for(;;)
   {
-	  //if (userBtnCount == 8){
-	  	  HAL_UART_Receive_IT(&huart3, (uint8_t *) aRxBuffer, 20);
+	while (Command == COMMAND_NULL) {
+		osDelay(10);
+	}
 
+	if (Command == COMMAND_FORWARD) {
+		Straight(FORWARD_DIR, CommandVal, 1, 150);
+	}
+	else if (Command == COMMAND_LEFT) {
+		gyroturn(1, 0, CommandVal);
+	}
+	else if (Command == COMMAND_RIGHT) {
+		gyroturn(1, 1, CommandVal);
+	}
+	else if (Command == COMMAND_DIST) {
+		sprintf(DistBuffer, "%3d\n", Distance);
+		HAL_UART_Transmit(&huart3, (uint8_t *)&DistBuffer, 5, 0xFFFF);
+	}
+	Command = COMMAND_NULL;
+	CommandVal = 0;
 
-		  char * pch = malloc(20);
-		  pch = strtok (aRxBuffer," ");
-
-		  if(strcmp(pch, "RESET")==0){
-			  HAL_NVIC_SystemReset();
-			  osDelay(100); //adjust this maybe
-			  HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 10, 0xFFFF);
-
-		  }
-
-		  if(strcmp(pch,"DIST")==0){
-
-		  		  	HAL_UART_Transmit(&huart3, (uint8_t *)&DistBuffer, 5, 0xFFFF);
-		  		  }
-
-		  if(strcmp(pch,"TURN")==0){ //IF TURN
-			  pch = strtok (NULL, " "); //Next word first
-			  if(strcmp(pch,"LEFT")==0){//IF TURN LEFT
-				  pch = strtok (NULL," ");
-				  gyroturn(1,0,atoi(pch));
-			  }
-
-			  if(strcmp(pch,"RIGHT")==0){//IF TURN RIGHT
-				  pch = strtok (NULL," ");
-				  gyroturn(1,1,atoi(pch));
-			  }
-		  }
-		  else if(strcmp(pch,"FORWARD")==0){
-			  pch = strtok (NULL, " "); //Next word first
-			  pch = strtok (NULL, " "); //Next word first
-			  Straight(FORWARD_DIR, atoi(pch), 1, 150);
-
-		  }else if(strcmp(pch,"BACKWARD")==0){
-			  pch = strtok (NULL, " "); //Next word first
-			  pch = strtok (NULL, " "); //Next word first
-			  Straight(FORWARD_DIR, atoi(pch), 1, 150);
-		  }
-
-
-		  for(int i =0; i<20;i++){
-			  sprintf(aRxBuffer[i], ' ');
-		  } //????? DOES THIS EVEN WORK
-
-    osDelay(10);
+    osDelay(100);
   }
   /* USER CODE END uart */
 }
